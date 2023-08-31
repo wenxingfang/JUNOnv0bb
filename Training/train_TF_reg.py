@@ -17,7 +17,7 @@ import argparse
 import ast
 from torch import linalg as LA
 from sklearn.utils import shuffle
-
+import math
 try:
     import nvidia_smi
     NVIDIA_SMI = True
@@ -76,6 +76,55 @@ class L1_cost(nn.Module):
         pred = pred/tmp_norm
         tmp_loss = torch.sum(torch.abs(pred-truth))/truth.size(0)
         return tmp_loss
+
+class Angle_cost(nn.Module):
+    def __inti__(self):
+        super(Angle_cost,self).__init__()
+        return
+    def forward(self, pred, truth):
+        eps = 1e-6
+        tmp_dot = torch.sum(pred*truth,axis=1)
+        tmp_norm = torch.sqrt(torch.sum(pred*pred,axis=1))*torch.sqrt(torch.sum(truth*truth,axis=1))
+        tmp_cosangle = tmp_dot/(tmp_norm+eps)
+        tmp_cosangle[tmp_cosangle> 1] =  1
+        tmp_cosangle[tmp_cosangle<-1] = -1
+        tmp_angle = torch.acos(tmp_cosangle)
+        return torch.mean(tmp_angle)
+
+class ThetaPhi_cost(nn.Module):
+    def __inti__(self):
+        super(ThetaPhi_cost,self).__init__()
+        return
+    def forward(self, pred, truth):##pred is (costheta, phi), between -1 to 1 
+        tmp_costheta = truth[:,2]/torch.sqrt(torch.sum(truth*truth,axis=1)) 
+        tmp_cosphi = truth[:,0]/torch.sqrt(torch.sum(truth[:,0:2]*truth[:,0:2],axis=1) )
+        tmp_phi = torch.acos(tmp_cosphi)
+        tmp_pi = math.pi*truth[:,1] < 0
+        tmp_phi += tmp_pi ##0 to 2pi
+        tmp_phi -= math.pi ##shift to -pi to pi
+        tmp_phi /= math.pi ##scale to -1 to 1
+        tmp_loss = torch.abs(pred[:,1]-tmp_phi) + torch.abs(pred[:,0]-tmp_costheta)
+        return torch.mean(tmp_loss)
+
+class AngleThetaPhi_cost(nn.Module):
+    def __inti__(self):
+        super(AngleThetaPhi_cost,self).__init__()
+        return
+    def forward(self, pred, truth):##pred is (costheta, phi), between -1 to 1
+        pred_pz = pred[:,0:1]##1*costheta 
+        pred_px = torch.sqrt(1-pred_pz*pred_pz)*torch.cos(math.pi*pred[:,1:2])
+        pred_py = torch.sqrt(1-pred_pz*pred_pz)*torch.sin(math.pi*pred[:,1:2])
+        pred1 = torch.cat((pred_px,pred_py,pred_pz),1)
+        eps = 1e-6
+        tmp_dot = torch.sum(pred1*truth,axis=1)
+        tmp_norm = torch.sqrt(torch.sum(pred1*pred1,axis=1))*torch.sqrt(torch.sum(truth*truth,axis=1))
+        tmp_cosangle = tmp_dot/(tmp_norm+eps)
+        tmp_cosangle[tmp_cosangle> 1] =  1
+        tmp_cosangle[tmp_cosangle<-1] = -1
+        tmp_angle = torch.acos(tmp_cosangle)
+        return torch.mean(tmp_angle)
+
+
 
 def read_file(filename, device):##For sim
     f = h5py.File(filename, 'r')
@@ -315,7 +364,8 @@ class NN(object):
             'fcs_cfg':parsed['fcs'],
             'dropout':parsed['Dropout'],
             'emb_dim':parsed['emb_dim'],
-            'psencoding':parsed['psencoding']
+            'psencoding':parsed['psencoding'],
+            'last_act':parsed['last_act']
         }
  
 
@@ -328,6 +378,12 @@ class NN(object):
             print('compiled model !')
  
         self.loss = L1_cost()
+        if parsed['loss'] == 'Angle':
+            print('loss=',parsed['loss'])
+            self.loss = Angle_cost()
+        elif parsed['loss'] == 'AngleThetaPhi':
+            print('loss=',parsed['loss'])
+            self.loss = AngleThetaPhi_cost()
     
         if parsed['Restore']:
             print('restored from ',parsed['restore_file'])
@@ -570,8 +626,9 @@ if (__name__ == '__main__'):
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
     parser.add_argument('--emb_dim', default=32, type=int, help='')
-    parser.add_argument('--sort_idx', default=4, type=int, help='4 is hittime, 5 is hittime_cor')
-    parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=True, help='')
+    parser.add_argument('--sort_idx', default=-1, type=int, help='4 is hittime, 5 is hittime_cor')
+    parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--last_act' , default='', type=str, help='')
  
     parsed = vars(parser.parse_args())
 

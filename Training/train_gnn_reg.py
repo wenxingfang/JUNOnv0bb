@@ -329,6 +329,20 @@ class DatasetTestTrain(torch.utils.data.Dataset):
 #    files = files_txt.split(';')
 #    for file in files:
 #        file_block(file,size)
+class Angle_cost(nn.Module):
+    def __inti__(self):
+        super(Angle_cost,self).__init__()
+        return
+    def forward(self, pred, truth):
+        eps = 1e-6
+        tmp_dot = torch.sum(pred*truth,axis=1)
+        tmp_norm = torch.sqrt(torch.sum(pred*pred,axis=1))*torch.sqrt(torch.sum(truth*truth,axis=1))
+        tmp_cosangle = tmp_dot/(tmp_norm+eps)
+        tmp_cosangle[tmp_cosangle> 1] =  1
+        tmp_cosangle[tmp_cosangle<-1] = -1
+        tmp_angle = torch.acos(tmp_cosangle)
+        return torch.mean(tmp_angle)
+
 
 
 def file_block(files_txt,size):
@@ -397,6 +411,10 @@ class NN(object):
         self.model = PhotonNet(input_dim = input_dim, output_dim = 3, grav_dim = 128, hidden_dim = 256, n_gravnet_blocks = 3, n_postgn_dense_blocks = 4, dropout = 0.1).to(self.device)
         #self.loss = nn.CrossEntropyLoss(reduction='none')##FIXME input after RELU?
         self.loss = L1_cost()
+        if parsed['loss'] == 'Angle':
+            print('loss=',parsed['loss'])
+            self.loss = Angle_cost()
+ 
         #self.loss = loss_2body()
         #self.loss = nn.MSELoss()
         #self.loss = nn.L1Loss()
