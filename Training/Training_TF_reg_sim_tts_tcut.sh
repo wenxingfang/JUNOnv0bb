@@ -48,5 +48,7 @@ conda activate pyTorch_1p8
 which python
 /usr/local/cuda/bin/nvcc --version
 export workpath=/hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb
-### TODO, sort by hit_cor
-python $workpath/train_TF_reg.py --sort_idx -1 --psencoding False --fcs 1024 128 3 --ps_features 11 --epochs 50 --lr 5e-4  --batch 32 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tts_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tts_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tts_tcut_points/test.txt --out_name $workpath/model/reg_TF_unsort_detsim_tts_tcut.pth
+###
+python $workpath/train_TF_reg.py --last_act 'tanh' --loss 'Angle' --sort_idx -1 --psencoding False --fcs 1024 128 3 --ps_features 11 --epochs 50 --lr 5e-4  --batch 32 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tts_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tts_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tts_tcut_points/test.txt --out_name $workpath/model/reg_TF_detsim_tts_tcut_lossAngle.pth
+### unsort by hit_cor, res: epoch48,train_loss=1.9986825701045707,valid_loss=1.9978728271207182, lr=7.150532420057921e-07
+#python $workpath/train_TF_reg.py --sort_idx -1 --psencoding False --fcs 1024 128 3 --ps_features 11 --epochs 50 --lr 5e-4  --batch 32 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tts_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tts_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tts_tcut_points/test.txt --out_name $workpath/model/reg_TF_unsort_detsim_tts_tcut.pth
