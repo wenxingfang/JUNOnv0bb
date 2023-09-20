@@ -272,7 +272,8 @@ class PhotonNet(nn.Module):
             ])
         self.postgn_dense = nn.Sequential(*postgn_dense_modules)
         # Output block
-        self.output = nn.Sequential(nn.Linear(hidden_dim, self.output_dim))
+        #self.output = nn.Sequential(nn.Linear(hidden_dim, self.output_dim))
+        self.output = nn.Sequential(nn.Linear(hidden_dim, self.output_dim),nn.Tanh())
 
     def forward(self, x, batch):
         #print(x,batch)

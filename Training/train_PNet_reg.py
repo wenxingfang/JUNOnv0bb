@@ -77,6 +77,22 @@ class L1_cost(nn.Module):
         tmp_loss = torch.sum(torch.abs(pred-truth))/truth.size(0)
         return tmp_loss
 
+class Angle_cost(nn.Module):
+    def __inti__(self):
+        super(Angle_cost,self).__init__()
+        return
+    def forward(self, pred, truth):
+        eps = 1e-6
+        tmp_dot = torch.sum(pred*truth,axis=1)
+        tmp_norm = torch.sqrt(torch.sum(pred*pred,axis=1))*torch.sqrt(torch.sum(truth*truth,axis=1))
+        tmp_cosangle = tmp_dot/(tmp_norm+eps)
+        tmp_cosangle[tmp_cosangle> 1] =  1
+        tmp_cosangle[tmp_cosangle<-1] = -1
+        tmp_angle = torch.acos(tmp_cosangle)
+        return torch.mean(tmp_angle)
+
+
+
 def read_file(filename, device):##For sim
     f = h5py.File(filename, 'r')
     df = f['data'][:]##N*11*P for sim, N*12*P for calib
@@ -85,7 +101,14 @@ def read_file(filename, device):##For sim
     df = df[idx]
     df_label = f['label'][idx]##N*16
     df[:,1:4,:] /= 17700. ## r scale
+    if parsed['T0_shift']:
+        #t0 = np.random.uniform(-2,2,(df.shape[0],1))
+        t0 = np.random.uniform(-parsed['T0_shift_val'],parsed['T0_shift_val'],(df.shape[0],1))
+        df[:,4  ,:] += t0
+        df[:,5  ,:] += t0
+        #print('t0=',t0)
     df[:,4  ,:] /= 100. ## time scale
+    if parsed['rm_tori']:df[:,4  ,:] = 0 ##remove original time info.
     df[:,6:9,:] /= 17700. ## r scale
     df, df_label = shuffle(df, df_label)
     tmp_x = torch.tensor(df.astype('float32')).to(device) 
@@ -293,7 +316,10 @@ class NN(object):
             print('compiled model !')
  
         self.loss = L1_cost()
-    
+        if parsed['loss'] == 'Angle':
+            print('loss=',parsed['loss'])
+            self.loss = Angle_cost()
+ 
         if parsed['Restore']:
             print('restored from ',parsed['restore_file'])
             checkpoint = torch.load(parsed['restore_file'])
@@ -528,6 +554,9 @@ if (__name__ == '__main__'):
     parser.add_argument('--fcs', nargs='+', type=int, help='')
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
+    parser.add_argument('--rm_tori', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--T0_shift', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--T0_shift_val',default=2, type=float, help='')
     
     parsed = vars(parser.parse_args())
 

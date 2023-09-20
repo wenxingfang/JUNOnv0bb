@@ -48,8 +48,8 @@ conda activate pyTorch_1p8
 which python
 /usr/local/cuda/bin/nvcc --version
 export workpath=/hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb
-### loss 'Angle': res
-python $workpath/train_gnn_reg.py --loss 'Angle' --epochs 100 --lr 1e-3  --batch 256 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tcut_points/test.txt --out_name $workpath/model/reg_gnn_detsim_tcut_lossAngle.pth
+### loss 'Angle': res: epoch98,train_loss=0.9694383492931986,valid_loss=0.9845350430732706, lr=9.580588675118042e-07
+python $workpath/train_gnn_reg.py --loss 'Angle' --epochs 100 --lr 5e-4  --batch 256 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tcut_points/test.txt --out_name $workpath/model/reg_gnn_detsim_tcut_lossAngle.pth
 ### longer training : res epoch99,train_loss=1.3303914132461845,valid_loss=1.3310270388456442, lr=4.5720913493726635e-07
 #python $workpath/train_gnn_reg.py  --epochs 100 --lr 1e-3  --batch 256 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tcut_points/test.txt --out_name $workpath/model/reg_gnn_detsim_tcut_lr.pth
 #python $workpath/train_gnn_reg.py  --epochs 50 --lr 5e-4  --batch 256 --scheduler 'OneCycleLR' --train_file $workpath/dataset/e-/detsim_tcut_points/train.txt --valid_file $workpath/dataset/e-/detsim_tcut_points/valid.txt --test_file $workpath/dataset/e-/detsim_tcut_points/test.txt --out_name $workpath/model/reg_gnn_detsim_tcut.pth

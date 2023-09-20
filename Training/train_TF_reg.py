@@ -365,7 +365,11 @@ class NN(object):
             'dropout':parsed['Dropout'],
             'emb_dim':parsed['emb_dim'],
             'psencoding':parsed['psencoding'],
-            'last_act':parsed['last_act']
+            'last_act':parsed['last_act'],
+            'nlayers':parsed['nlayers'],
+            'nhead':parsed['nhead'],
+            'nhid':parsed['nhid'],
+            'en_dropout':parsed['en_dropout']
         }
  
 
@@ -626,6 +630,10 @@ if (__name__ == '__main__'):
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
     parser.add_argument('--emb_dim', default=32, type=int, help='')
+    parser.add_argument('--nlayers', default=2, type=int, help='')
+    parser.add_argument('--nhead', default=8, type=int, help='')
+    parser.add_argument('--nhid', default=2048, type=int, help='')
+    parser.add_argument('--en_dropout', default=0.1, type=float, help='')
     parser.add_argument('--sort_idx', default=-1, type=int, help='4 is hittime, 5 is hittime_cor')
     parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--last_act' , default='', type=str, help='')
