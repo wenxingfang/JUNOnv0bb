@@ -519,6 +519,7 @@ class NN(object):
         print(f"testing - t={current_time}")
         self.model.eval()
         data_out = None
+        softmax = nn.Softmax(dim=1)
         with torch.no_grad():
             for i in self.test_file_block_sig:
                 sig_files = self.test_file_block_sig[i]
@@ -530,6 +531,7 @@ class NN(object):
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
                     Y0     = df_y0  [ib:ib+self.batch_size]                       
                     out = self.model(x_cord, x_fs, None)
+                    out=softmax(out)
                     y_pred = out.cpu()
                     y_pred = y_pred.detach().numpy()
                     y_pred =  np.concatenate((Y0,y_pred), axis=1)
