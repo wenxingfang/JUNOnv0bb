@@ -344,8 +344,23 @@ class NN(object):
         hyperparameters = {
             'knn':parsed['knn'],
             'ps_features':parsed['ps_features'],
+            'pn_outdim':128
         }
-        self.model = particle_net.get_model(**hyperparameters).to(self.device)
+        hyperparameters_TF = {
+            'in_channels': parsed['ps_features'],
+            'fcs_cfg':parsed['fcs_TF'],
+            'dropout':parsed['Dropout'],
+            'emb_dim':parsed['emb_dim'],
+            'psencoding':parsed['psencoding'],
+            'nlayers':parsed['nlayers'],
+            'nhead':parsed['nhead'],
+            'nhid':parsed['nhid'],
+            'en_dropout':parsed['en_dropout']
+        }
+        hyperparameters['TF'] = hyperparameters_TF
+        hyperparameters['fcs'] = parsed['fcs']
+ 
+        self.model = particle_net.get_model_with_TF(**hyperparameters).to(self.device)
         version_str = torch.__version__ 
         version_tuple = tuple(map(int, version_str.split('.')[:3]))
         if version_tuple > (2,0,0):
@@ -613,8 +628,16 @@ if (__name__ == '__main__'):
     parser.add_argument('--use_2D', action='store', type=ast.literal_eval, default=True, help='')
     parser.add_argument('--use_1D', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--fcs', nargs='+', type=int, help='')
+    parser.add_argument('--fcs_TF', nargs='+', type=int, help='')
+    parser.add_argument('--fcs_pn', nargs='+', type=int, help='')
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
+    parser.add_argument('--emb_dim', default=32, type=int, help='')
+    parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--nlayers', default=2, type=int, help='')
+    parser.add_argument('--nhead', default=8, type=int, help='')
+    parser.add_argument('--nhid', default=2048, type=int, help='')
+    parser.add_argument('--en_dropout', default=0.1, type=float, help='')
     parser.add_argument('--rm_tori', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--rm_direction', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--T0_shift', action='store', type=ast.literal_eval, default=False, help='')

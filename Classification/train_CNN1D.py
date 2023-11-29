@@ -82,6 +82,9 @@ def read_file(filename):##For sim
     assert np.sum(idx)>0
     df = df[idx]
     df_label = f['label'][idx]##N*16
+    df_data_1d = f['data_1D'][idx]##N*dim
+    df_data_1d /= 10.
+    df_data_1d = np.reshape(df_data_1d, (df_data_1d.shape[0],1,df_data_1d.shape[1]))##reshape N,dim to N,1,dim
     df[:,1:4,:] /= 17700. ## r scale
     if parsed['T0_shift']:
         t0 = np.random.uniform(-parsed['T0_shift_val'],parsed['T0_shift_val'],(df.shape[0],1))
@@ -96,18 +99,19 @@ def read_file(filename):##For sim
     #tmp_y = torch.tensor(df_label.astype('float32')).to(device) 
     f.close()
     #return tmp_x[:,6:9,:], tmp_x, tmp_y[:,8:11], df_label
-    return df[:,6:9,:], df, df_label
+    return df[:,6:9,:], df, df_label, df_data_1d
 
 
 def read_files(filenames_sig, filenames_bkg, device):##For sim
     assert len(filenames_sig) == len(filenames_bkg)
     out_pos = None
     out_data = None
+    out_data_1d = None
     out_meta = None
     out_label = None
     for i in range(len(filenames_sig)):
-        sig_pos, sig_data, sig_meta = read_file(filenames_sig[i]) 
-        bkg_pos, bkg_data, bkg_meta = read_file(filenames_bkg[i]) 
+        sig_pos, sig_data, sig_meta, sig_data_1d = read_file(filenames_sig[i]) 
+        bkg_pos, bkg_data, bkg_meta, bkg_data_1d = read_file(filenames_bkg[i]) 
         if sig_pos.shape[2] > bkg_pos.shape[2]:
             diff = sig_pos.shape[2] - bkg_pos.shape[2]
             padding_pos = np.zeros((bkg_pos.shape[0],bkg_pos.shape[1],diff), dtype=int)
@@ -123,6 +127,8 @@ def read_files(filenames_sig, filenames_bkg, device):##For sim
 
         all_pos = np.concatenate((sig_pos,bkg_pos),axis=0)
         all_data = np.concatenate((sig_data,bkg_data),axis=0)
+        all_data_1d = np.concatenate((sig_data_1d,bkg_data_1d),axis=0)
+        out_data_1d = all_data_1d if out_data_1d is None else np.concatenate((out_data_1d ,all_data_1d),axis=0)
         if out_pos is None:
             out_pos = all_pos
             out_data = all_data
@@ -148,12 +154,13 @@ def read_files(filenames_sig, filenames_bkg, device):##For sim
         all_meta = np.concatenate((all_meta,all_label),axis=1)##cat 0 or 1 for sig and bkg
         out_meta = all_meta if out_meta is None else np.concatenate((out_meta,all_meta),axis=0)
 
-    out_pos, out_data, out_meta, out_label = shuffle(out_pos, out_data, out_meta, out_label)
+    out_pos, out_data, out_meta, out_label, out_data_1d = shuffle(out_pos, out_data, out_meta, out_label, out_data_1d)
     out_pos = torch.tensor(out_pos.astype('float32')).to(device)
     out_data = torch.tensor(out_data.astype('float32')).to(device)
+    out_data_1d = torch.tensor(out_data_1d.astype('float32')).to(device)
     #out_meta = torch.tensor(out_meta.astype('float32')).to(device)
     out_label = torch.tensor(out_label).long().to(device)
-    return out_pos, out_data, out_label, out_meta
+    return out_pos, out_data, out_label, out_meta, out_data_1d
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, filenamelist, channel, npe_scale, time_scale, E_scale, R_scale, L_scale, use_2D=True, use_ext=True, use_ori_label=False):
@@ -340,12 +347,40 @@ class NN(object):
         self.test_file_block_bkg  = file_block(parsed['test_file_bkg' ],parsed['test_file_bsize'])
         #print(f'train file blocks={self.train_file_block}')
         self.kwargs = {'num_workers': 1, 'pin_memory': True} if self.cuda else {}
-        #print('fcs=',parsed['fcs'])
-        hyperparameters = {
-            'knn':parsed['knn'],
-            'ps_features':parsed['ps_features'],
+        ########## CNN parameters ###########
+        cnn_cfg = {
+            'A1': [4    , 'M', 16,'M', 32,'M'],
+            'A2': [4,8,'M', 16,32,'M', 64,128,'M'],
+            'A3': [4    , 'M', 16,'M', 32,'M',64, 64,'M'], ##good
+            'A4': [4    , 'M', 16,'M', 32, 32,'M',64, 64,'M'],
+            'A5': [4,4  , 'M', 16,16,'M', 32, 32,'M',64, 64,'M'],
+            'A31': [4    , 'M', 16,'M', 32,'M',64, 64, 64, 'M'],
+            'A32': [4    , 'M', 16,'M', 32,'M',64, 64, 64, 64, 'M'],
+            'A33': [4    , 'M', 16,'M', 32,'M',64, 64,'M', 128, 128, 'M'],
+            'A': [64    , 'M', 128     , 'M', 256, 256          , 'M', 512, 512          , 'M', 512, 512          , 'M'],
+            'B': [64, 64, 'M', 128, 128, 'M', 256, 256          , 'M', 512, 512          , 'M', 512, 512          , 'M'],
+            'C': [64, 64, 'M', 128, 128, 'M', 256, 256, 256     , 'M', 512, 512, 512     , 'M'                         ],
+            'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256     , 'M', 512, 512, 512     , 'M', 512, 512, 512     , 'M'],
+            'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
         }
-        self.model = particle_net.get_model(**hyperparameters).to(self.device)
+        n_inputs = {'A0':1680,'A1':128,'A2':256,'A3':198,'A33':2688,'A':10752,'C':50176,'D':10752}
+        if parsed['useRes']:
+            n_inputs = {'A0':1680,'A1':6720,'A2':6272,'A3':5952,'A33':2688,'A':10752,'C':50176,'D':10752}
+        hyperparameters_cnn = {
+            'in_channels': 1,
+            'features_cfg': cnn_cfg[parsed['cnn_cfg'] ],
+            #'fcs_cfg':[1024, 128],
+            'fcs_cfg':parsed['cnn_fcs'],
+            'n_input':n_inputs[parsed['cnn_cfg'] ],
+            'dropout':parsed['Dropout'],
+            'Batch_Norm':parsed['cnn_BatchNorm'],
+            'dim':1,
+            'useRes':parsed['useRes']
+        }
+        ################
+        hyperparameters = {'cnn':hyperparameters_cnn}
+        ################
+        self.model = particle_net.get_cnn_model(**hyperparameters).to(self.device)
         version_str = torch.__version__ 
         version_tuple = tuple(map(int, version_str.split('.')[:3]))
         if version_tuple > (2,0,0):
@@ -458,10 +493,11 @@ class NN(object):
             sig_files = self.train_file_block_sig[idx_sig[i]]
             bkg_files = self.train_file_block_bkg[idx_bkg[i%len(idx_bkg)]]
             if len(sig_files) != len(bkg_files): continue
-            df_cord, df_fs, df_y, _ = read_files(sig_files, bkg_files, self.device)
+            df_cord, df_fs, df_y, _, df_1d = read_files(sig_files, bkg_files, self.device)
             for ib in range(0, df_cord.size(0), self.batch_size):
                 x_cord = df_cord[ib:ib+self.batch_size]                       
                 x_fs   = df_fs  [ib:ib+self.batch_size]                       
+                x_1d   = df_1d  [ib:ib+self.batch_size]                       
                 Y      = df_y   [ib:ib+self.batch_size]                       
                 if x_cord.size(0) != self.batch_size:continue
                 Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
@@ -471,7 +507,7 @@ class NN(object):
                     x_cord = x_cord[:,:,0:Npos]
                             
                 self.optimizer.zero_grad()
-                z = self.model(x_cord, x_fs, None)
+                z = self.model(x_1d)
                 #print('z=',z.size(),',y=',Y.size())
                 loss = self.loss(z, Y.squeeze())
                 
@@ -497,10 +533,11 @@ class NN(object):
                 sig_files = self.valid_file_block_sig[i] 
                 bkg_files = self.valid_file_block_bkg[i%len(self.valid_file_block_bkg)] 
                 if len(sig_files) != len(bkg_files): continue
-                df_cord, df_fs, df_y, _ = read_files(sig_files, bkg_files, self.device)
+                df_cord, df_fs, df_y, _, df_1d = read_files(sig_files, bkg_files, self.device)
                 for ib in range(0, df_cord.size(0), self.batch_size):
                     x_cord = df_cord[ib:ib+self.batch_size]                       
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
+                    x_1d   = df_1d  [ib:ib+self.batch_size]                       
                     Y      = df_y   [ib:ib+self.batch_size]                       
                     if x_cord.size(0) != self.batch_size:continue
                     Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
@@ -508,7 +545,7 @@ class NN(object):
                         Npos = 1000
                         x_fs   = x_fs  [:,:,0:Npos]
                         x_cord = x_cord[:,:,0:Npos]
-                    z = self.model(x_cord, x_fs, None)
+                    z = self.model(x_1d)
                     loss = self.loss(z, Y.squeeze())
                     total_loss += loss.item()*z.size(0)
                     n_total += z.size(0)
@@ -526,12 +563,13 @@ class NN(object):
                 sig_files = self.test_file_block_sig[i]
                 bkg_files = self.test_file_block_bkg[i%len(self.test_file_block_bkg)] 
                 if len(sig_files) != len(bkg_files): continue
-                df_cord, df_fs, df_y, df_y0 = read_files(sig_files, bkg_files, self.device)
+                df_cord, df_fs, df_y, df_y0, df_1d = read_files(sig_files, bkg_files, self.device)
                 for ib in range(0, df_cord.size(0), self.batch_size):
                     x_cord = df_cord[ib:ib+self.batch_size]                       
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
+                    x_1d   = df_1d  [ib:ib+self.batch_size]                       
                     Y0     = df_y0  [ib:ib+self.batch_size]                       
-                    out = self.model(x_cord, x_fs, None)
+                    out = self.model(x_1d)
                     out=softmax(out)
                     y_pred = out.cpu()
                     y_pred = y_pred.detach().numpy()
@@ -595,8 +633,8 @@ if (__name__ == '__main__'):
     parser.add_argument('--Restore', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--restore_file' , default='', type=str, help='')
     parser.add_argument('--outFile' , default='', type=str, help='')
-    parser.add_argument('--cfg' , default='', type=str, help='')
-    parser.add_argument('--BatchNorm', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--cnn_cfg' , default='', type=str, help='')
+    parser.add_argument('--cnn_BatchNorm', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--Dropout', default=0, type=float, help='')
     parser.add_argument('--DoTest', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--DoOptimization', action='store', type=ast.literal_eval, default=True, help='')
@@ -612,6 +650,8 @@ if (__name__ == '__main__'):
     parser.add_argument('--useRes', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--use_2D', action='store', type=ast.literal_eval, default=True, help='')
     parser.add_argument('--use_1D', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--cnn_fcs', nargs='+', type=int, help='')
+    parser.add_argument('--pn_fcs', nargs='+', type=int, help='')
     parser.add_argument('--fcs', nargs='+', type=int, help='')
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')

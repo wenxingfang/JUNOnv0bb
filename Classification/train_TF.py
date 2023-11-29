@@ -1,4 +1,4 @@
-#import shutil
+import os
 import numpy as np
 #import matplotlib.pyplot as pl
 import torch
@@ -10,14 +10,14 @@ import h5py
 import time
 #from tqdm import tqdm
 import sys
-import os 
-from modules import particle_net
+from modules import model_ae as model
 #import platform
 import argparse
 #import healpy as hp
 import ast
 from torch import linalg as LA
 from sklearn.utils import shuffle
+import math
 import logging
 
 if __name__ == '__main__':
@@ -38,6 +38,38 @@ try:
 except:
     NVIDIA_SMI = False
 
+
+class Dice_loss(nn.Module):
+    def __inti__(self):
+        super(Dice_loss,self).__init__()
+        return
+    def forward(self, pred, truth):
+        #tmp_sum_pred = torch.FloatTensor([0.])
+        #tmp_sum_truth = torch.FloatTensor([0.])
+        #tmp_sum_corss = torch.FloatTensor([0.])
+        if pred.dim() == 3:
+            tmp_sum_pred = torch.sum(pred*pred,(1,2))
+            tmp_sum_truth = torch.sum(truth*truth,(1,2))
+            tmp_sum_cross = torch.sum(pred*truth,(1,2))
+            tmp_loss = (tmp_sum_pred+tmp_sum_truth)/(2*tmp_sum_cross) -1 
+            tmp_loss = torch.sum(tmp_loss)/pred.size(0)
+            return tmp_loss
+        if pred.dim() == 4:
+            tmp_sum_pred = torch.sum(pred*pred,(2,3))
+            tmp_sum_truth = torch.sum(truth*truth,(2,3))
+            tmp_sum_cross = torch.sum(pred*truth,(2,3))
+            tmp_loss = (tmp_sum_pred+tmp_sum_truth)/(2*tmp_sum_cross) -1 
+            tmp_loss = torch.sum(tmp_loss)/pred.size(0)
+            return tmp_loss
+
+        #tmp_loss = (torch.sum(pred*pred) + torch.sum(truth*truth))/(2*torch.sum(pred*truth))
+        #tmp_loss0 = (torch.sum(pred[0]*pred[0]) + torch.sum(truth[0]*truth[0]))/(2*torch.sum(pred[0]*truth[0]))
+        #print('tmp_loss0=',tmp_loss0-1,'abs sum pred=',torch.sum(torch.abs(pred[0])),',abs sum real=',torch.sum(torch.abs(truth[0])) )
+        #return (tmp_loss - 1)/pred.size(0)
+
+def dice_cost(pred_y, label_y):##https://agenda.infn.it/event/28874/contributions/169211/attachments/94397/130957/20220708_AEsforSUEP_ICHEP2022_schhibra.pdf
+    tmp_loss = (torch.sum(pred_y*pred_y) + torch.sum(label_y*label_y))/(2*torch.sum(pred_y*label_y))
+    return (tmp_loss - 1)/pred_y.size(0)
 
 class MAPE_cost(nn.Module):
     def __inti__(self):
@@ -73,7 +105,38 @@ class Angle_cost(nn.Module):
         tmp_angle = torch.acos(tmp_cosangle)
         return torch.mean(tmp_angle)
 
+class ThetaPhi_cost(nn.Module):
+    def __inti__(self):
+        super(ThetaPhi_cost,self).__init__()
+        return
+    def forward(self, pred, truth):##pred is (costheta, phi), between -1 to 1 
+        tmp_costheta = truth[:,2]/torch.sqrt(torch.sum(truth*truth,axis=1)) 
+        tmp_cosphi = truth[:,0]/torch.sqrt(torch.sum(truth[:,0:2]*truth[:,0:2],axis=1) )
+        tmp_phi = torch.acos(tmp_cosphi)
+        tmp_pi = math.pi*truth[:,1] < 0
+        tmp_phi += tmp_pi ##0 to 2pi
+        tmp_phi -= math.pi ##shift to -pi to pi
+        tmp_phi /= math.pi ##scale to -1 to 1
+        tmp_loss = torch.abs(pred[:,1]-tmp_phi) + torch.abs(pred[:,0]-tmp_costheta)
+        return torch.mean(tmp_loss)
 
+class AngleThetaPhi_cost(nn.Module):
+    def __inti__(self):
+        super(AngleThetaPhi_cost,self).__init__()
+        return
+    def forward(self, pred, truth):##pred is (costheta, phi), between -1 to 1
+        pred_pz = pred[:,0:1]##1*costheta 
+        pred_px = torch.sqrt(1-pred_pz*pred_pz)*torch.cos(math.pi*pred[:,1:2])
+        pred_py = torch.sqrt(1-pred_pz*pred_pz)*torch.sin(math.pi*pred[:,1:2])
+        pred1 = torch.cat((pred_px,pred_py,pred_pz),1)
+        eps = 1e-6
+        tmp_dot = torch.sum(pred1*truth,axis=1)
+        tmp_norm = torch.sqrt(torch.sum(pred1*pred1,axis=1))*torch.sqrt(torch.sum(truth*truth,axis=1))
+        tmp_cosangle = tmp_dot/(tmp_norm+eps)
+        tmp_cosangle[tmp_cosangle> 1] =  1
+        tmp_cosangle[tmp_cosangle<-1] = -1
+        tmp_angle = torch.acos(tmp_cosangle)
+        return torch.mean(tmp_angle)
 
 def read_file(filename):##For sim
     f = h5py.File(filename, 'r')
@@ -83,19 +146,42 @@ def read_file(filename):##For sim
     df = df[idx]
     df_label = f['label'][idx]##N*16
     df[:,1:4,:] /= 17700. ## r scale
-    if parsed['T0_shift']:
-        t0 = np.random.uniform(-parsed['T0_shift_val'],parsed['T0_shift_val'],(df.shape[0],1))
-        df[:,4  ,:] += t0
-        df[:,5  ,:] += t0
+    #if parsed['T0_shift']:
+    #    t0 = np.random.uniform(-parsed['T0_shift_val'],parsed['T0_shift_val'],(df.shape[0],1))
+    #    df[:,4  ,:] += t0
+    #    df[:,5  ,:] += t0
     df[:,4  ,:] /= 100. ## time scale
-    if parsed['rm_tori']:df[:,4  ,:] = 0 ##remove original time info.
-    if parsed['rm_direction']:df[:,11:14,:] = 0 ##remove direction info.
+    #if parsed['rm_tori']:df[:,4  ,:] = 0 ##remove original time info.
+    #if parsed['rm_direction']:df[:,11:14,:] = 0 ##remove direction info.
     df[:,6:9,:] /= 17700. ## r scale
-    #df, df_label = shuffle(df, df_label)
-    #tmp_x = torch.tensor(df.astype('float32')).to(device) 
-    #tmp_y = torch.tensor(df_label.astype('float32')).to(device) 
     f.close()
-    #return tmp_x[:,6:9,:], tmp_x, tmp_y[:,8:11], df_label
+    return df[:,6:9,:], df, df_label
+
+def read_file_sort(filename, device, sidx):##For sim
+    f = h5py.File(filename, 'r')
+    df = f['data'][:]##N*11*P for sim, N*12*P for calib
+    idx = np.sum(np.abs(df),axis=(1,2))>0
+    assert np.sum(idx)>0
+    df = df[idx]
+    df_label = f['label'][idx]##N*16
+    df, df_label = shuffle(df, df_label)
+    df       = torch.tensor(df      .astype('float32')).to(device) 
+    df_label = torch.tensor(df_label.astype('float32')).to(device) 
+    if sidx>=0:
+        mask = df.abs().sum(dim=1)>0##N,P
+        df[:,sidx,:] += 9999*(~mask)
+        sorted, indices = torch.sort(df[:,sidx,:],dim=1)
+        df[:,sidx,:] -= 9999*(~mask)##back
+        for i in range(df.size(0)):
+            #print('before:',df[i,:,:])
+            df[i,:,:] = df[i,:,indices[i]]
+            #print('after :',df[i,:,:])
+    df[:,1:4,:] /= 17700. ## r scale
+    df[:,4  ,:] /= 100. ## time scale
+    df[:,6:9,:] /= 17700. ## r scale
+    f.close()
+    #return tmp_x[:,6:9,:], tmp_x[:,[0,1,2,3,4,5,9,10],:], tmp_y[:,8:11], df_label
+    #return df[:,6:9,:], df, df_label[:,8:11], df_label
     return df[:,6:9,:], df, df_label
 
 
@@ -154,6 +240,9 @@ def read_files(filenames_sig, filenames_bkg, device):##For sim
     #out_meta = torch.tensor(out_meta.astype('float32')).to(device)
     out_label = torch.tensor(out_label).long().to(device)
     return out_pos, out_data, out_label, out_meta
+
+
+
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, filenamelist, channel, npe_scale, time_scale, E_scale, R_scale, L_scale, use_2D=True, use_ext=True, use_ori_label=False):
@@ -338,26 +427,37 @@ class NN(object):
         self.train_file_block_bkg = file_block(parsed['train_file_bkg'],parsed['train_file_bsize'])
         self.valid_file_block_bkg = file_block(parsed['valid_file_bkg'],parsed['valid_file_bsize'])
         self.test_file_block_bkg  = file_block(parsed['test_file_bkg' ],parsed['test_file_bsize'])
+ 
         #print(f'train file blocks={self.train_file_block}')
         self.kwargs = {'num_workers': 1, 'pin_memory': True} if self.cuda else {}
         #print('fcs=',parsed['fcs'])
+
         hyperparameters = {
-            'knn':parsed['knn'],
-            'ps_features':parsed['ps_features'],
+            #'features_cfg': cfg[parsed['cfg'] ],
+            #'fcs_cfg':[1024, 128, 2],
+            'in_channels': parsed['ps_features'],
+            'fcs_cfg':parsed['fcs'],
+            'dropout':parsed['Dropout'],
+            'emb_dim':parsed['emb_dim'],
+            'psencoding':parsed['psencoding'],
+            'last_act':parsed['last_act'],
+            'nlayers':parsed['nlayers'],
+            'nhead':parsed['nhead'],
+            'nhid':parsed['nhid'],
+            'en_dropout':parsed['en_dropout']
         }
-        self.model = particle_net.get_model(**hyperparameters).to(self.device)
+ 
+
+
+        self.model = model.TFENet(hyperparameters).to(self.device)
         version_str = torch.__version__ 
         version_tuple = tuple(map(int, version_str.split('.')[:3]))
         if version_tuple > (2,0,0):
             self.model = torch.compile(self.model)
             print('compiled model !')
  
-        #self.loss = L1_cost()
         self.loss = nn.CrossEntropyLoss()
-        #if parsed['loss'] == 'Angle':
-        #    print('loss=',parsed['loss'])
-        #    self.loss = Angle_cost()
- 
+   
         if parsed['Restore']:
             print('restored from ',parsed['restore_file'])
             checkpoint = torch.load(parsed['restore_file'])
@@ -403,6 +503,9 @@ class NN(object):
             print('tot traning sig =',total_n_sig,',bkg=',total_n_bkg)
             total_steps = int(1.0*(total_n_sig+total_n_bkg)/self.batch_size)
             self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=self.lr, steps_per_epoch=total_steps, epochs=epochs)
+
+
+
 
         for epoch in range(1, epochs + 1):
             t_loss, t_corr, t_tot = self.train(epoch)
@@ -460,21 +563,22 @@ class NN(object):
             if len(sig_files) != len(bkg_files): continue
             df_cord, df_fs, df_y, _ = read_files(sig_files, bkg_files, self.device)
             for ib in range(0, df_cord.size(0), self.batch_size):
-                x_cord = df_cord[ib:ib+self.batch_size]                       
                 x_fs   = df_fs  [ib:ib+self.batch_size]                       
                 Y      = df_y   [ib:ib+self.batch_size]                       
-                if x_cord.size(0) != self.batch_size:continue
                 Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
-                if Npos > 1000: 
-                    Npos = 1000
-                    x_fs   = x_fs  [:,:,0:Npos]
-                    x_cord = x_cord[:,:,0:Npos]
-                            
+                if Npos > 1000: Npos = 1000
+                #print('Npos=',Npos,',size0=',x_fs.size(2))
+                x_fs = x_fs[:,:,0:Npos]
+                if x_fs.size(0) != self.batch_size: continue
+                #mask = x_fs.abs().sum(dim=1).squeeze()  # (N, bin)                        
+                #if torch.any(mask.sum(dim=1)<=0):
+                #    print('fname=',fname,',size=',df_cord.size(0),',ib=',ib,',ib+self.batch_size=',ib+self.batch_size,',x_fs size=',x_fs.size() )
                 self.optimizer.zero_grad()
-                z = self.model(x_cord, x_fs, None)
-                #print('z=',z.size(),',y=',Y.size())
+                z = self.model(x_fs)
+                #print('z=',z.size(),',Y=',Y.size())
+                #print('z=',z,',Y=',Y)
                 loss = self.loss(z, Y.squeeze())
-                
+                #print('loss nan=',torch.any(torch.isnan(loss)),',loss=',loss )
                 loss.backward()
                 if self.parsed['clip_grad'] != 0: torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.parsed['clip_grad'])
                 self.optimizer.step()
@@ -499,16 +603,13 @@ class NN(object):
                 if len(sig_files) != len(bkg_files): continue
                 df_cord, df_fs, df_y, _ = read_files(sig_files, bkg_files, self.device)
                 for ib in range(0, df_cord.size(0), self.batch_size):
-                    x_cord = df_cord[ib:ib+self.batch_size]                       
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
                     Y      = df_y   [ib:ib+self.batch_size]                       
-                    if x_cord.size(0) != self.batch_size:continue
                     Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
-                    if Npos > 1000: 
-                        Npos = 1000
-                        x_fs   = x_fs  [:,:,0:Npos]
-                        x_cord = x_cord[:,:,0:Npos]
-                    z = self.model(x_cord, x_fs, None)
+                    if Npos > 1000: Npos = 1000
+                    x_fs = x_fs[:,:,0:Npos]
+                    if x_fs.size(0) != self.batch_size: continue
+                    z = self.model(x_fs)
                     loss = self.loss(z, Y.squeeze())
                     total_loss += loss.item()*z.size(0)
                     n_total += z.size(0)
@@ -528,10 +629,13 @@ class NN(object):
                 if len(sig_files) != len(bkg_files): continue
                 df_cord, df_fs, df_y, df_y0 = read_files(sig_files, bkg_files, self.device)
                 for ib in range(0, df_cord.size(0), self.batch_size):
-                    x_cord = df_cord[ib:ib+self.batch_size]                       
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
-                    Y0     = df_y0  [ib:ib+self.batch_size]                       
-                    out = self.model(x_cord, x_fs, None)
+                    Y0     = df_y0  [ib:ib+self.batch_size].cpu().detach().numpy()                       
+                    Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
+                    if Npos > 1000: Npos = 1000
+                    x_fs = x_fs[:,:,0:Npos]
+                    if x_fs.size(0) != self.batch_size: continue
+                    out = self.model(x_fs)
                     out=softmax(out)
                     y_pred = out.cpu()
                     y_pred = y_pred.detach().numpy()
@@ -602,7 +706,6 @@ if (__name__ == '__main__'):
     parser.add_argument('--DoOptimization', action='store', type=ast.literal_eval, default=True, help='')
     parser.add_argument('--clip_grad', default=0, type=float, help='')
     parser.add_argument('--scheduler' , default='StepLR', type=str, help='')
-    parser.add_argument('--loss' , default='', type=str, help='')
     parser.add_argument('--frac_ep', default=0.2, type=float, help='')
     parser.add_argument('--frac_pu', default=1.0, type=float, help='')
     parser.add_argument('--nhit_c14', default=50, type=float, help='')
@@ -615,11 +718,15 @@ if (__name__ == '__main__'):
     parser.add_argument('--fcs', nargs='+', type=int, help='')
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
-    parser.add_argument('--rm_tori', action='store', type=ast.literal_eval, default=False, help='')
-    parser.add_argument('--rm_direction', action='store', type=ast.literal_eval, default=False, help='')
-    parser.add_argument('--T0_shift', action='store', type=ast.literal_eval, default=False, help='')
-    parser.add_argument('--T0_shift_val',default=2, type=float, help='')
-    
+    parser.add_argument('--emb_dim', default=32, type=int, help='')
+    parser.add_argument('--nlayers', default=2, type=int, help='')
+    parser.add_argument('--nhead', default=8, type=int, help='')
+    parser.add_argument('--nhid', default=2048, type=int, help='')
+    parser.add_argument('--en_dropout', default=0.1, type=float, help='')
+    parser.add_argument('--sort_idx', default=-1, type=int, help='4 is hittime, 5 is hittime_cor')
+    parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=False, help='')
+    parser.add_argument('--last_act' , default='', type=str, help='')
+ 
     parsed = vars(parser.parse_args())
 
     formatter = logging.Formatter(
