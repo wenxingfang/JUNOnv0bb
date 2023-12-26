@@ -8,6 +8,7 @@ import torch.utils.data
 import h5py
 #from torch.autograd import Variable
 import time
+import random
 #from tqdm import tqdm
 import sys
 from modules import model_ae as model
@@ -392,6 +393,7 @@ def file_block(files_txt,size):
     index = 0
     with open(files_txt,'r') as f:
         lines = f.readlines()
+        random.shuffle(lines)##Add
         for line in lines:
             if '#' in line:continue
             line = line.replace('\n','')
@@ -547,6 +549,8 @@ class NN(object):
                 self.scheduler.step()
 
     def train(self, epoch):
+        self.train_file_block_sig = file_block(self.parsed['train_file_sig'],self.parsed['train_file_bsize'])#Add
+        self.train_file_block_bkg = file_block(self.parsed['train_file_bkg'],self.parsed['train_file_bsize'])
         self.model.train()
         current_time = time.strftime("%Y-%m-%d-%H:%M")
         print(f"training Epoch {epoch}/{self.n_epochs}    - t={current_time}")
@@ -630,7 +634,7 @@ class NN(object):
                 df_cord, df_fs, df_y, df_y0 = read_files(sig_files, bkg_files, self.device)
                 for ib in range(0, df_cord.size(0), self.batch_size):
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
-                    Y0     = df_y0  [ib:ib+self.batch_size].cpu().detach().numpy()                       
+                    Y0     = df_y0  [ib:ib+self.batch_size]                       
                     Npos = (x_fs.abs().sum(dim=(0,1))>0).sum().item()
                     if Npos > 1000: Npos = 1000
                     x_fs = x_fs[:,:,0:Npos]

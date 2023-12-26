@@ -1,4 +1,4 @@
-#import shutil
+import random
 import numpy as np
 #import matplotlib.pyplot as pl
 import torch
@@ -146,6 +146,17 @@ def read_files(filenames_sig, filenames_bkg, device):##For sim
         out_label = all_label if out_label is None else np.concatenate((out_label,all_label),axis=0)
         all_meta = np.concatenate((sig_meta,bkg_meta),axis=0)
         all_meta = np.concatenate((all_meta,all_label),axis=1)##cat 0 or 1 for sig and bkg
+        ##########
+        ext_sig_meta = np.full((sig_data.shape[0],1),0,np.int32)
+        bkg_id = -1
+        if 'e-' in filenames_bkg[i]: bkg_id = 1 
+        elif 'C10' in filenames_bkg[i]: bkg_id = 2
+        elif 'Bi214' in filenames_bkg[i]: bkg_id = 3
+        else: print('Error: Unknow type bkgs!!!')
+        ext_bkg_meta = np.full((bkg_data.shape[0],1),bkg_id,np.int32)
+        ext_meta = np.concatenate((ext_sig_meta,ext_bkg_meta),axis=0)
+        all_meta = np.concatenate((all_meta,ext_meta),axis=1)
+        ###########
         out_meta = all_meta if out_meta is None else np.concatenate((out_meta,all_meta),axis=0)
 
     out_pos, out_data, out_meta, out_label = shuffle(out_pos, out_data, out_meta, out_label)
@@ -303,6 +314,7 @@ def file_block(files_txt,size):
     index = 0
     with open(files_txt,'r') as f:
         lines = f.readlines()
+        random.shuffle(lines)
         for line in lines:
             if '#' in line:continue
             line = line.replace('\n','')
@@ -332,35 +344,20 @@ class NN(object):
         
         self.batch_size = batch_size        
         self.parsed = parsed
-        self.train_file_block_sig = file_block(parsed['train_file_sig'],parsed['train_file_bsize'])
-        self.valid_file_block_sig = file_block(parsed['valid_file_sig'],parsed['valid_file_bsize'])
-        self.test_file_block_sig  = file_block(parsed['test_file_sig' ],parsed['test_file_bsize'])
-        self.train_file_block_bkg = file_block(parsed['train_file_bkg'],parsed['train_file_bsize'])
-        self.valid_file_block_bkg = file_block(parsed['valid_file_bkg'],parsed['valid_file_bsize'])
-        self.test_file_block_bkg  = file_block(parsed['test_file_bkg' ],parsed['test_file_bsize'])
+        self.train_file_block_sig = file_block(self.parsed['train_file_sig'],self.parsed['train_file_bsize'])
+        self.valid_file_block_sig = file_block(self.parsed['valid_file_sig'],self.parsed['valid_file_bsize'])
+        self.test_file_block_sig  = file_block(self.parsed['test_file_sig' ],self.parsed['test_file_bsize'])
+        self.train_file_block_bkg = file_block(self.parsed['train_file_bkg'],self.parsed['train_file_bsize'])
+        self.valid_file_block_bkg = file_block(self.parsed['valid_file_bkg'],self.parsed['valid_file_bsize'])
+        self.test_file_block_bkg  = file_block(self.parsed['test_file_bkg' ],self.parsed['test_file_bsize'])
         #print(f'train file blocks={self.train_file_block}')
         self.kwargs = {'num_workers': 1, 'pin_memory': True} if self.cuda else {}
         #print('fcs=',parsed['fcs'])
         hyperparameters = {
             'knn':parsed['knn'],
             'ps_features':parsed['ps_features'],
-            'pn_outdim':128
         }
-        hyperparameters_TF = {
-            'in_channels': parsed['ps_features'],
-            'fcs_cfg':parsed['fcs_TF'],
-            'dropout':parsed['Dropout'],
-            'emb_dim':parsed['emb_dim'],
-            'psencoding':parsed['psencoding'],
-            'nlayers':parsed['nlayers'],
-            'nhead':parsed['nhead'],
-            'nhid':parsed['nhid'],
-            'en_dropout':parsed['en_dropout']
-        }
-        hyperparameters['TF'] = hyperparameters_TF
-        hyperparameters['fcs'] = parsed['fcs']
- 
-        self.model = particle_net.get_model_with_TF(**hyperparameters).to(self.device)
+        self.model = particle_net.get_model(**hyperparameters).to(self.device)
         version_str = torch.__version__ 
         version_tuple = tuple(map(int, version_str.split('.')[:3]))
         if version_tuple > (2,0,0):
@@ -459,6 +456,8 @@ class NN(object):
                 self.scheduler.step()
 
     def train(self, epoch):
+        self.train_file_block_sig = file_block(self.parsed['train_file_sig'],self.parsed['train_file_bsize'])
+        self.train_file_block_bkg = file_block(self.parsed['train_file_bkg'],self.parsed['train_file_bsize'])
         self.model.train()
         current_time = time.strftime("%Y-%m-%d-%H:%M")
         print(f"training Epoch {epoch}/{self.n_epochs}    - t={current_time}")
@@ -546,7 +545,6 @@ class NN(object):
                     x_cord = df_cord[ib:ib+self.batch_size]                       
                     x_fs   = df_fs  [ib:ib+self.batch_size]                       
                     Y0     = df_y0  [ib:ib+self.batch_size]                       
-                    if x_cord.size(0) != self.batch_size:continue
                     out = self.model(x_cord, x_fs, None)
                     out=softmax(out)
                     y_pred = out.cpu()
@@ -595,9 +593,9 @@ if (__name__ == '__main__'):
     parser.add_argument('--train_file_bkg', default='', type=str, help='')
     parser.add_argument('--valid_file_bkg', default='', type=str, help='')
     parser.add_argument('--test_file_bkg' , default='', type=str, help='')
-    parser.add_argument('--train_file_bsize', default=2, type=int, help='')
-    parser.add_argument('--valid_file_bsize', default=2, type=int, help='')
-    parser.add_argument('--test_file_bsize' , default=2, type=int, help='')
+    parser.add_argument('--train_file_bsize', default=20, type=int, help='')
+    parser.add_argument('--valid_file_bsize', default=20, type=int, help='')
+    parser.add_argument('--test_file_bsize' , default=20, type=int, help='')
     parser.add_argument('--out_name' , default='', type=str, help='')
     parser.add_argument('--channel'  , default=2, type=int, help='0 for npe, 1 for first hit time')
     parser.add_argument('--npe_scale', default=5, type=float, help='')
@@ -629,16 +627,8 @@ if (__name__ == '__main__'):
     parser.add_argument('--use_2D', action='store', type=ast.literal_eval, default=True, help='')
     parser.add_argument('--use_1D', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--fcs', nargs='+', type=int, help='')
-    parser.add_argument('--fcs_TF', nargs='+', type=int, help='')
-    parser.add_argument('--fcs_pn', nargs='+', type=int, help='')
     parser.add_argument('--knn',default=7, type=int, help='')
     parser.add_argument('--ps_features',default=11, type=int, help='')
-    parser.add_argument('--emb_dim', default=32, type=int, help='')
-    parser.add_argument('--psencoding', action='store', type=ast.literal_eval, default=False, help='')
-    parser.add_argument('--nlayers', default=2, type=int, help='')
-    parser.add_argument('--nhead', default=8, type=int, help='')
-    parser.add_argument('--nhid', default=2048, type=int, help='')
-    parser.add_argument('--en_dropout', default=0.1, type=float, help='')
     parser.add_argument('--rm_tori', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--rm_direction', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--T0_shift', action='store', type=ast.literal_eval, default=False, help='')
