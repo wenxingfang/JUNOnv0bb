@@ -14,7 +14,7 @@
 #SBATCH --account=junogpu
   
 # Specify your job name, optional option, but strongly recommand to specify some name
-#SBATCH --job-name=pn_bkgs
+#SBATCH --job-name=pn_ext
   
 # Specify how many cores you will need, default is one if not specified
 #SBATCH --ntasks=1
@@ -22,8 +22,8 @@
 # Specify the output file path of your job
 # Attention!! Your afs account must have write access to the path
 # Or the job will be FAILED!
-#SBATCH --output=/hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb_cls/log_train_PNet_bkgs_sim.out
-#SBATCH --error=//hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb_cls/log_train_PNet_bkgs_sim.err
+#SBATCH --output=/hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb_cls/log_train_PNet_bkgs_sim_ext.out
+#SBATCH --error=//hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb_cls/log_train_PNet_bkgs_sim_ext.err
   
 # Specify memory to use, or slurm will allocate all available memory in MB
 #SBATCH --cpus-per-task=1
@@ -48,9 +48,9 @@ conda activate pyTorch_1p8
 which python
 /usr/local/cuda/bin/nvcc --version
 export workpath=/hpcfs/juno/junogpu/fangwx/FastSim/JUNO/nv0bb_cls
-### use earlys ratio = 0.05, tts, dn, energy smear effects,res:epoch45,train_loss=0.6465836881803363,valid_loss=0.6472285399202253, lr=0.0001624713501
-export datasetpath=$workpath/dataset/detsim_m10_earlys0p05_tts_dn_ens_points
-python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_dn_ens_sim.pth
+### use earlys ratio = 0.05, tts, dn, energy smear effects,res:
+#export datasetpath=$workpath/dataset/detsim_m10_earlys0p05_tts_dn_ens_points
+#python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_dn_ens_sim.pth
 ### use earlys ratio = 0.05, tts, t0 effects,res:epoch49,train_loss=0.6599050250315127,valid_loss=0.6689804299567688, lr=9.803357293520456e-05
 #export datasetpath=$workpath/dataset/detsim_m10_earlys0p05_tts_t0_points
 #python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_t0_sim.pth
@@ -60,9 +60,9 @@ python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --tr
 ### use earlys ratio = 0.05, more train, e- dir smear, no tts ,res:epoch35,train_loss=0.4900724100215094,valid_loss=0.4958924563945883, lr=0.0003455198
 #export datasetpath=$workpath/dataset/detsim_m10ns_earlys0p05_points_add_1d/bkgs_em_dir_smear
 #python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_dirSmear_sim.pth
-### use earlys ratio = 0.05, more train, tts, e- dir smear ,res:epoch32,train_loss=0.637515594702483,valid_loss=0.6375611638338372, lr=0.000400504946
-#export datasetpath=$workpath/dataset/detsim_m10ns_earlys0p05_realTTS_points/bkgs_em_dir_smear
-#python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_dirSmear_sim.pth
+### use earlys ratio = 0.05, more train, tts, e- dir smear, T0 shift ,res:epoch35,train_loss=0.6034487774262923,valid_loss=0.6093624276441855, lr=0.000332162
+export datasetpath=$workpath/dataset/detsim_m10ns_earlys0p05_realTTS_points/bkgs_em_dir_smear
+python $workpath/train_PNet_bkgs.py --T0_shift True --T0_shift_val 5 --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_dirSmear_t0s5_sim.pth
 ### use earlys ratio = 0.05, more train, tts ,res:epoch39,train_loss=0.6358970573475194,valid_loss=0.6402444883841141, lr=0.000270723
 #export datasetpath=$workpath/dataset/detsim_m10ns_earlys0p05_realTTS_points/bkgs
 #python $workpath/train_PNet_bkgs.py --ps_features 14 --epochs 50 --lr 5e-4  --train_file_bsize 100 --batch 128 --scheduler 'OneCycleLR' --train_file_sig $datasetpath/sig_train.txt --valid_file_sig $datasetpath/sig_valid.txt --test_file_sig $datasetpath/sig_test.txt --train_file_bkg $datasetpath/bkgs_train.txt --valid_file_bkg $datasetpath/bkgs_valid.txt --test_file_bkg $datasetpath/bkgs_test.txt --out_name $workpath/model/PNet_bkgs_tts_sim.pth

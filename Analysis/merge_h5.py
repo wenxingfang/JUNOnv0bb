@@ -6,6 +6,7 @@ import numpy as np
 def save_h5(outname,dh_dict):
     merged_file = h5py.File(outname, 'w')
     for dataset_name in dh_dict:
+    #    print(dataset_name,dh_dict[dataset_name].shape)
         merged_file.create_dataset(dataset_name, data=dh_dict[dataset_name])
     merged_file.close()
 
@@ -18,8 +19,20 @@ if __name__ == '__main__':
     #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_h5_merged'
     #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_h5'
     #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_h5_merged'
-    m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_h5'
-    m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_all_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_all_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_all_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_all_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_t0_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_t0_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_t0_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_t0_h5_merged'
+    #m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_dn_ens_h5'
+    #m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/Bi214_points_m10_earlys0p05_1D_tts_dn_ens_h5_merged'
+    m_input_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_dn_ens_h5'
+    m_output_path = '/cefs/higgs/wxfang/JUNO/ForReco/cls/C10_points_m10_earlys0p05_1D_tts_dn_ens_h5_merged'
     os.system('realpath %s/* > tmp.txt'%m_input_path)
     m_bat_evt = 1000
     if not os.path.exists(m_output_path):

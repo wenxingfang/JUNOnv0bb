@@ -24,6 +24,7 @@ def get_parser():
                         help='max_evt Number')
     parser.add_argument('--input', action='store', type=str, default='',
                         help='input root file.')
+    parser.add_argument('--input_evt', action='store', type=str, default='', help='')
     parser.add_argument('--doReWeight', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--doEcut', action='store', type=ast.literal_eval, default=False, help='')
     parser.add_argument('--E_min' , action='store', type=float, default=2.3, help='')
@@ -1002,9 +1003,9 @@ def get_weight(val):
     tmp_bin = m_h_axis.FindBin(val)
     return m_h_num.GetBinContent(tmp_bin)
 
-def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1D hist of hittime_cor
+def root2hdf5_Points_detsim_v3 (batch_size, tree, out_name):##add 1D hist of hittime_cor
     Nmax = 0
-    for ie in range(start_event, batch_size+start_event):
+    for ie in m_evt_list:
         tmp_N = 0
         tree.GetEntry(ie)
         pmtID                = list( getattr(tree, "simhit_PMTIDs"      ) )
@@ -1035,7 +1036,7 @@ def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1
     df_1D   = np.full((batch_size, int(parse_args.time_1D_high-parse_args.time_1D_low)), 0, np.float32)
     df_true = np.full((batch_size, 16), 0, np.float32)
     ref_vector = rt.TVector3(1,0,0)
-    for ie in range(start_event, batch_size+start_event):
+    for ie in m_evt_list:
         print('for evt=',ie)
         tree.GetEntry(ie)
         tmp_dict = {}
@@ -1073,17 +1074,19 @@ def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1
             if edep < parse_args.E_min or edep > parse_args.E_max:continue 
         #print('edepX=',edepX,',tmp_simx=',tmp_simx,',edep=',edep)
         ########## reweighting ########
-        if parse_args.doReWeight: 
-            we = get_weight(edep)
-            if we > 1:
-                sv = 1/we
-                ran = random.uniform(0, 1)
-                if ran > sv:continue
+        #if parse_args.doReWeight: 
+        #    we = get_weight(edep)
+        #    if we > 1:
+        #        sv = 1/we
+        #        ran = random.uniform(0, 1)
+        #        if ran > sv:continue
         ####################
         pmtID                = list( getattr(tree, "simhit_PMTIDs"       ))
         hittime              = list( getattr(tree, "simhit_times"        ))
         simhit_isCerenkov    = list( getattr(tree, "simhit_isCerenkov"   ))
         simhit_isOriginalOP  = list( getattr(tree, "simhit_isOriginalOP" ))
+        pdg_id     =  getattr(tree, "pdg_id" )
+        sum_Qedep  =  getattr(tree, "sum_Qedep" )
 
         if parse_args.addTTS:
             hittime = pmt_times_tts(pmtID,hittime,parse_args.TTS_realistic)
@@ -1104,7 +1107,7 @@ def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1
         if parse_args.addT0Smear:
             t0 = random.gauss(0, parse_args.T0_sigma) 
         tmp_initP = math.sqrt(initPX*initPX + initPY*initPY + initPZ*initPZ)
-        if tmp_initP <=0:continue
+        #if tmp_initP <=0:continue
 
         rand_costheta = np.random.uniform(-1,1,1)
         rand_phi      = np.random.uniform(0,2*math.pi,1)
@@ -1149,13 +1152,13 @@ def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1
         np_cor_time = np.array(hittimes_cor)
         sort_index  = np.argsort(np_cor_time) 
         tmp_idx = 0
-
+        df_index = m_evt_list.index(ie)
         ########## save 1D hist ####################
         for ii in range(len(hittimes_cor)):
             #print('ii=',ii,',hittimes_cor=',hittimes_cor[ii])
             tmp_bin = int(hittimes_cor[ii]-parse_args.time_1D_low)
             if tmp_bin<0 or tmp_bin>= df_1D.shape[1]:continue
-            df_1D[ie-start_event,tmp_bin] += 1
+            df_1D[df_index,tmp_bin] += 1
         ############ save hits ###################
         #for ii in range(sort_index.shape[0]):
         for ii in range(tmp_Nmax):
@@ -1173,51 +1176,48 @@ def root2hdf5_Points_detsim_v3 (batch_size, tree, start_event, out_name):##add 1
                 pmt_v3 = rt.TVector3(pmt_x-edepX,pmt_y-edepY,pmt_z-edepZ)
                 cosdangle = math.cos( gen_v3.Angle(pmt_v3))
                 if cosdangle < parse_args.cosAngle_min:continue 
-            df[ie-start_event,0,tmp_idx] = edep
-            df[ie-start_event,1,tmp_idx] = edepX
-            df[ie-start_event,2,tmp_idx] = edepY
-            df[ie-start_event,3,tmp_idx] = edepZ
-            df[ie-start_event,4,tmp_idx] = hittime[ih]
-            df[ie-start_event,5,tmp_idx] = hittimes_cor[ih]
-            df[ie-start_event,6,tmp_idx] = pmt_x
-            df[ie-start_event,7,tmp_idx] = pmt_y
-            df[ie-start_event,8,tmp_idx] = pmt_z
+            df[df_index,0,tmp_idx] = edep
+            df[df_index,1,tmp_idx] = edepX
+            df[df_index,2,tmp_idx] = edepY
+            df[df_index,3,tmp_idx] = edepZ
+            df[df_index,4,tmp_idx] = hittime[ih]
+            df[df_index,5,tmp_idx] = hittimes_cor[ih]
+            df[df_index,6,tmp_idx] = pmt_x
+            df[df_index,7,tmp_idx] = pmt_y
+            df[df_index,8,tmp_idx] = pmt_z
             if m_Id_type_dict[int(pmtID[ih])] == 'Hamamatsu': 
-                df[ie-start_event,9,tmp_idx] = 1
-                df[ie-start_event,10,tmp_idx] = 0
+                df[df_index,9,tmp_idx] = 1
+                df[df_index,10,tmp_idx] = 0
             else:
-                df[ie-start_event,9,tmp_idx] = 0
-                df[ie-start_event,10,tmp_idx] = 1
-            df[ie-start_event,11,tmp_idx] = 0
-            df[ie-start_event,12,tmp_idx] = 0
-            df[ie-start_event,13,tmp_idx] = 0
-            if parse_args.save_dir_random: 
-                df[ie-start_event,11,tmp_idx] = ran_initPX/ran_initP
-                df[ie-start_event,12,tmp_idx] = ran_initPY/ran_initP
-                df[ie-start_event,13,tmp_idx] = ran_initPZ/ran_initP
-            elif parse_args.save_dir_gen: 
-                df[ie-start_event,11,tmp_idx] = gen_p_v3.X()/gen_p_v3.Mag() 
-                df[ie-start_event,12,tmp_idx] = gen_p_v3.Y()/gen_p_v3.Mag()
-                df[ie-start_event,13,tmp_idx] = gen_p_v3.Z()/gen_p_v3.Mag()
+                df[df_index,9,tmp_idx] = 0
+                df[df_index,10,tmp_idx] = 1
+            if pdg_id != 11:##not the electron , using random direction
+                df[df_index,11,tmp_idx] = ran_initPX/ran_initP
+                df[df_index,12,tmp_idx] = ran_initPY/ran_initP
+                df[df_index,13,tmp_idx] = ran_initPZ/ran_initP
+            else: ## electron
+                df[df_index,11,tmp_idx] = gen_p_v3.X()/gen_p_v3.Mag() 
+                df[df_index,12,tmp_idx] = gen_p_v3.Y()/gen_p_v3.Mag()
+                df[df_index,13,tmp_idx] = gen_p_v3.Z()/gen_p_v3.Mag()
 
             tmp_idx += 1
 
-        df_true[ie-start_event, 0] = edep
-        df_true[ie-start_event, 1] = edepX
-        df_true[ie-start_event, 2] = edepY
-        df_true[ie-start_event, 3] = edepZ
-        df_true[ie-start_event, 4] = initX
-        df_true[ie-start_event, 5] = initY
-        df_true[ie-start_event, 6] = initZ
-        df_true[ie-start_event, 7] = tmp_initP
-        df_true[ie-start_event, 8] = initPX/tmp_initP
-        df_true[ie-start_event, 9] = initPY/tmp_initP
-        df_true[ie-start_event, 10]= initPZ/tmp_initP
-        df_true[ie-start_event, 11] = 0
-        df_true[ie-start_event, 12] = 0
-        df_true[ie-start_event, 13] = 0
-        df_true[ie-start_event, 14] = 0 
-        df_true[ie-start_event, 15] = t0
+        df_true[df_index, 0] = edep
+        df_true[df_index, 1] = edepX
+        df_true[df_index, 2] = edepY
+        df_true[df_index, 3] = edepZ
+        df_true[df_index, 4] = initX
+        df_true[df_index, 5] = initY
+        df_true[df_index, 6] = initZ
+        df_true[df_index, 7] = tmp_initP
+        df_true[df_index, 8] = initPX
+        df_true[df_index, 9] = initPY
+        df_true[df_index, 10]= initPZ
+        df_true[df_index, 11] = df[df_index,11,0]
+        df_true[df_index, 12] = df[df_index,12,0]
+        df_true[df_index, 13] = df[df_index,13,0]
+        df_true[df_index, 14] = t0 
+        df_true[df_index, 15] = pdg_id
         ###########################
     if True:
         tmp_index = []
@@ -2442,6 +2442,17 @@ def calculate_ck_angle(KE,n):#in MeV
     print('beta=%f,n=%f,costheta=%f'%(beta,n,costheta))
 if __name__ == '__main__':
 
+    parser = get_parser()
+    parse_args = parser.parse_args()
+    ######### for read evt list ######
+    m_evt_list = []
+    with open(parse_args.input_evt,'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.replace('\n','')
+            m_evt_list.append(int(float(line)))
+    batch_size = len(m_evt_list)
+    ############################ 
     plots_path = '/junofs/users/wxfang/JUNO/nv0bb/J23.1.0-rc1/cls/Ana/plots_cls/'
     large_PMT_pos = '/cvmfs/juno.ihep.ac.cn/centos7_amd64_gcc1120/Pre-Release/J23.1.0-rc1/data/Detector/Geometry/PMTPos_CD_LPMT.csv'#FIXME to J23.1.0-rc1 
     large_PMT_type= '/cvmfs/juno.ihep.ac.cn/centos7_amd64_gcc1120/Pre-Release/J23.1.0-rc1/data/Detector/Geometry/PMTType_CD_LPMT.csv'#FIXME to J23.1.0-rc1 
@@ -2452,9 +2463,6 @@ if __name__ == '__main__':
     (x_min, x_max, y_min, y_max) = draw_map(L_id_dict)
     assert ( x_min==0 and y_min==0 )
     ###########################################################
-    parser = get_parser()
-    parse_args = parser.parse_args()
-    batch_size = parse_args.batch_size
     #m_use_mc_vertex = True
     #m_tcor_low = 225##trigger time and event time, 
     #m_tcor_high = m_tcor_low+70
@@ -2560,27 +2568,20 @@ if __name__ == '__main__':
 
 
     if parse_args.SaveH5:
-        if batch_size < 0 : 
-            batch_size = totalEntries
-        batch = int(float(totalEntries)/batch_size)
-        print ('total events=%d, batch_size=%d, batchs=%d, last=%d'%(totalEntries, batch_size, batch, totalEntries%batch_size))
-        start = 0
-        for i in range(batch):
-            out_name = parse_args.output.replace('.h5','_batch%d_N%d.h5'%(i, batch_size))
-            if parse_args.Save2D:
-                root2hdf5_2D (batch_size, tree, start, out_name, L_id_dict, x_max, y_max, Id_x_y_z_dict, parse_args.Draw_data, parse_args.Draw_CK)
-            elif parse_args.Save2D_detsim:
-                root2hdf5_2D_detsim (batch_size, tree, start, out_name, L_id_dict, x_max, y_max, Id_x_y_z_dict, parse_args.Draw_data, False)
-            elif parse_args.SavePoints_detsim:
-                root2hdf5_Points_detsim (batch_size, tree, start, out_name)
-            elif parse_args.SavePoints_detsim_v2:
-                root2hdf5_Points_detsim_v2 (batch_size, tree, start, out_name)
-            elif parse_args.SavePoints_detsim_v3:
-                root2hdf5_Points_detsim_v3 (batch_size, tree, start, out_name)
-            elif parse_args.SavePoints_calib:
-                root2hdf5_Points_calib (batch_size, tree, start, out_name)
-            elif parse_args.SavePoints_calib_v2:
-                root2hdf5_Points_calib_v2 (batch_size, tree, start, out_name)
-            start = start + batch_size
-            if parse_args.m_max_evt>0 and start >= parse_args.m_max_evt:break
+        out_name = parse_args.output
+        root2hdf5_Points_detsim_v3 (batch_size, tree, out_name)
+        #if parse_args.Save2D:
+        #    root2hdf5_2D (batch_size, tree, start, out_name, L_id_dict, x_max, y_max, Id_x_y_z_dict, parse_args.Draw_data, parse_args.Draw_CK)
+        #elif parse_args.Save2D_detsim:
+        #    root2hdf5_2D_detsim (batch_size, tree, start, out_name, L_id_dict, x_max, y_max, Id_x_y_z_dict, parse_args.Draw_data, False)
+        #elif parse_args.SavePoints_detsim:
+        #    root2hdf5_Points_detsim (batch_size, tree, start, out_name)
+        #elif parse_args.SavePoints_detsim_v2:
+        #    root2hdf5_Points_detsim_v2 (batch_size, tree, start, out_name)
+        #elif parse_args.SavePoints_detsim_v3:
+        #    root2hdf5_Points_detsim_v3 (batch_size, tree, start, out_name)
+        #elif parse_args.SavePoints_calib:
+        #    root2hdf5_Points_calib (batch_size, tree, start, out_name)
+        #elif parse_args.SavePoints_calib_v2:
+        #    root2hdf5_Points_calib_v2 (batch_size, tree, start, out_name)
     print('done')  
